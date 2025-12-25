@@ -1,0 +1,90 @@
+# version: '3.8'  # Removed - obsolete in newer Docker Compose versions
+
+services:
+  # Ollama Service - LLM Backend
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama_service
+    runtime: runc  # Use standard runtime instead of nvidia
+    ports:
+      - "11435:11434"  # Map host 11435 to container 11434
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    networks:
+      - rag_network
+    # Health check removed - Ollama container doesn't have curl/wget
+    # Service will be ready when port 11434 is listening
+    restart: unless-stopped
+
+  # Vector Database - Chroma
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: chroma_db
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    networks:
+      - rag_network
+    # Health check - Chroma should have curl available
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # FastAPI Application - RAG Service
+  rag_api:
+    build:
+      context: .
+      dockerfile: Dockerfile.rag
+    container_name: rag_fastapi
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./documents:/app/documents
+      - ./app:/app/app
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - CHROMA_HOST=chroma
+      - CHROMA_PORT=8000
+      - EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+    depends_on:
+      - ollama
+      - chroma
+    networks:
+      - rag_network
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://192.168.0.103:8001
+    container_name: rag_frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - rag_api
+    networks:
+      - rag_network
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+    driver: local
+  chroma_data:
+    driver: local
+
+networks:
+  rag_network:
+    driver: bridge
