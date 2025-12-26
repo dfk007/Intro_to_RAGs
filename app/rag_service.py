@@ -32,7 +32,7 @@ class RAGService:
         # Initialize LLM
         self.llm = Ollama(
             base_url=self.ollama_base_url,
-            model="llama2"
+            model="tinyllama"
         )
         
         # Initialize QA chain
