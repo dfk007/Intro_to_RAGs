@@ -23,7 +23,7 @@ services:
     image: chromadb/chroma:latest
     container_name: chroma_db
     ports:
-      - "8000:8000"
+      - "8002:8000"
     volumes:
       - chroma_data:/chroma/chroma
     environment:
@@ -69,7 +69,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_API_URL=http://192.168.0.103:8001
+        - NEXT_PUBLIC_API_URL=http://localhost:8001
     container_name: rag_frontend
     ports:
       - "3000:3000"
